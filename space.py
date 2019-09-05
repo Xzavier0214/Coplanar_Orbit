@@ -31,12 +31,17 @@ class Union(gym.spaces.Space):
         [space.seed(seed) for space in self.spaces]
 
     def contains(self, x):
-        return any(space.contains(x) for space in self.spaces)
+        if x is None:
+            return any(isinstance(space, NoneSpace) for space in self.spaces)
+        else:
+            return any(space.contains(x) for space in self.spaces)
 
 
 if __name__ == "__main__":
-    union = Union((NoneSpace(), gym.spaces.Box(
-        low=np.array([1]), high=np.array([3]))))
+    union = Union((
+        gym.spaces.Box(
+            low=np.array([1]), high=np.array([3])),
+        NoneSpace()))
 
     print(union.sample())
     print(union.contains(None))

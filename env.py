@@ -3,6 +3,7 @@ from numpy import sin, cos, sqrt, pi, exp, arctan2
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 import gym
+from gym.envs.classic_control import rendering
 import space
 
 RE = 6378.137e3
@@ -124,6 +125,9 @@ class CoplanarEnv(gym.Env):
                  m_p=1500, m_e=1500,
                  tau=10):
 
+        # 最大半长轴（归一化）
+        self.rmax_norm = 1.5
+
         # 动作集
         action_dict = gym.spaces.Dict({
             # 动作类型 0：无推力，1：脉冲推力，2：连续小推力
@@ -149,11 +153,11 @@ class CoplanarEnv(gym.Env):
         #      （E轨道半径r，E速度大小v，E位置角度theta，E速度角度gamma，E质量m）
         observation_box_norm = gym.spaces.Box(
             low=np.array([1, 0, 0, 0, 0]),
-            high=np.array([1.5, np.inf, 2*pi, 2*pi, np.inf])
+            high=np.array([self.rmax_norm, np.inf, 2*pi, 2*pi, np.inf])
         )
         observation_box = gym.spaces.Box(
             low=np.array([1*DU, 0, 0, 0, 0]),
-            high=np.array([1.5*DU, np.inf, 2*pi, 0, np.inf])
+            high=np.array([self.rmax_norm*DU, np.inf, 2*pi, 0, np.inf])
         )
         if norm:
             self.observation_space = gym.spaces.Tuple(
@@ -193,6 +197,7 @@ class CoplanarEnv(gym.Env):
         self.viewer = None
 
     def step(self, action, tau=None):
+        assert self.action_space.contains(action), 'invalid action'
         if action['genre'] == 0:
             action_p = NoneAction()
         elif action['genre'] == 1:
@@ -223,15 +228,65 @@ class CoplanarEnv(gym.Env):
         pass
 
     def render(self):
-        pass
+        screen_width = 600
+        screen_height = 600
+        offset = 25
+
+        if self.viewer is None:
+            self.viewer = rendering.Viewer(screen_width, screen_height)
+
+            # 绘制P
+            circle_p = rendering.make_circle(5)
+            self.circle_p_trans = rendering.Transform()
+            circle_p.add_attr(self.circle_p_trans)
+            circle_p.set_color(220/255, 20/255, 60/255)
+            self.viewer.add_geom(circle_p)
+
+            # 绘制E
+            circle_e = rendering.make_circle(5)
+            self.circle_e_trans = rendering.Transform()
+            circle_e.add_attr(self.circle_e_trans)
+            circle_e.set_color(60/255, 179/255, 113/255)
+            self.viewer.add_geom(circle_e)
+
+        if self.state is None:
+            return None
+
+        x_p = self.state_p[0]*cos(self.state_p[2])
+        y_p = self.state_p[0]*sin(self.state_p[2])
+        x_e = self.state_e[0]*cos(self.state_e[2])
+        y_e = self.state_e[0]*sin(self.state_e[2])
+
+        if not self.norm:
+            x_p /= DU
+            y_p /= DU
+            x_e /= DU
+            y_e /= DU
+
+        width_scale = (screen_width - 2*offset)/(2*self.rmax_norm)
+        circle_p_x = width_scale*x_p + screen_width/2
+        circle_e_x = width_scale*x_e + screen_width/2
+
+        height_scale = (screen_height - 2*offset)/(2*self.rmax_norm)
+        circle_p_y = height_scale*y_p + screen_height/2
+        circle_e_y = height_scale*y_e + screen_height/2
+
+        self.circle_p_trans.set_translation(circle_p_x, circle_p_y)
+        self.circle_e_trans.set_translation(circle_e_x, circle_e_y)
+
+        return self.viewer.render()
 
     def close(self):
-        pass
+        if self.viewer is not None:
+            self.viewer.close()
+            self.viewer = None
 
-    def seed(self):
-        pass
+    def seed(self, seed=None):
+        self.np_random, seed = gym.utils.seeding.np_random(seed)
+        return seed
 
 
+# 辅助函数，返回对应的action
 def action_fcn(genre, args=None):
     if genre == 0:
         return {'genre': 0, 'impulse': None, 'low_thrust': None}
@@ -290,6 +345,8 @@ if __name__ == "__main__":
     x2_p, y2_p, x2_e, y2_e = [], [], [], []
     x3_p, y3_p, x3_e, y3_e = [], [], [], []
     while t < t3_mark:
+        env.render()
+
         # 第一阶段
         if t < t1_mark:
             if t + tau < t1_mark:
@@ -334,18 +391,20 @@ if __name__ == "__main__":
             x3_e.append(each_state_e[0] * cos(each_state_e[2]))
             y3_e.append(each_state_e[0] * sin(each_state_e[2]))
 
-    ax.scatter(x1_p[0], y1_p[0], marker='*', color='g')
-    ax.plot(x1_p, y1_p, color='g')
-    ax.scatter(x2_p[0], y2_p[0], marker='*', color='r')
-    ax.plot(x2_p, y2_p, color='r')
-    ax.scatter(x3_p[0], y3_p[0], marker='*', color='b')
-    # ax.plot(x3_p, y3_p, color='b')
+    env.close()
 
-    ax.plot(x1_e, y1_e, color='g')
-    ax.plot(x2_e, y2_e, color='r')
-    ax.plot(x3_e, y3_e, color='b')
+    # ax.scatter(x1_p[0], y1_p[0], marker='*', color='g')
+    # ax.plot(x1_p, y1_p, color='g')
+    # ax.scatter(x2_p[0], y2_p[0], marker='*', color='r')
+    # ax.plot(x2_p, y2_p, color='r')
+    # ax.scatter(x3_p[0], y3_p[0], marker='*', color='b')
+    # # ax.plot(x3_p, y3_p, color='b')
 
-    ax.set_xlim([-1.55, 1.55])
-    ax.set_ylim([-1.55, 1.55])
+    # ax.plot(x1_e, y1_e, color='g')
+    # ax.plot(x2_e, y2_e, color='r')
+    # ax.plot(x3_e, y3_e, color='b')
 
-    plt.show()
+    # ax.set_xlim([-1.55, 1.55])
+    # ax.set_ylim([-1.55, 1.55])
+
+    # plt.show()
