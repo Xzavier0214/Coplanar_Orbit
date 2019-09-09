@@ -2,6 +2,8 @@ from scipy.integrate import solve_ivp
 from util import MU, DU, TU, VU, GU
 import numpy as np
 from numpy import sin, cos, sqrt, pi, exp, arctan2
+from arrow import make_arrow
+from gym.envs.classic_control import rendering
 
 
 # 共面状态方程 state：状态：半径r，速度v，位置角度theta，速度角度gamma，质量m
@@ -37,22 +39,30 @@ class Action:
     def step(self, t, state, tau, norm):
         raise NotImplementedError
 
+    def arrow(self, arrow_size):
+        raise NotImplementedError
+
 
 # 无推力
 class NoneAction(Action):
     def step(self, t, state, tau, norm):
-        assert tau > 0
+        assert tau >= 0
 
-        tf = tau
-        t_span = 0, tf
-        t_eval = tf,
-        result = solve_ivp(
-            lambda t, y1_p: coplanar_state_fcn(y1_p, 0, 0, None, norm),
-            t_span=t_span,
-            y0=state,
-            t_eval=t_eval)
+        if tau > 0:
+            tf = tau
+            t_span = 0, tf
+            t_eval = tf,
+            result = solve_ivp(
+                lambda t, y: coplanar_state_fcn(y, 0, 0, None, norm),
+                t_span=t_span,
+                y0=state,
+                t_eval=t_eval)
+            state = tuple(result.y.T[0])
 
-        return (t + tau, tuple(result.y.T[0]))
+        return (t + tau, state)
+
+    def arrow(self, arrow_size):
+        return None
 
 
 # 脉冲推力
@@ -84,6 +94,12 @@ class ImpulseAction(Action):
 
         return (t, state_)
 
+    def arrow(self, arrow_size):
+        impulse_arrow = make_arrow((0, 0), (0, arrow_size))
+        impulse_arrow.add_attr(
+            rendering.Transform(rotation=-self.phi))
+        return impulse_arrow
+
 
 # 连续小推力
 class LowThrustAction(Action):
@@ -107,12 +123,13 @@ class LowThrustAction(Action):
 
         return (t + tau, tuple(result.y.T[0]))
 
+    def arrow(self, arrow_size):
+        impulse_arrow = make_arrow((0, 0), (0, arrow_size))
+        impulse_arrow.add_attr(
+            rendering.Transform(rotation=-self.phi))
+        return impulse_arrow
 
-# 辅助函数，返回对应的action
-def action_fcn(genre, args=None):
-    if genre == 0:
-        return {'genre': 0, 'impulse': None, 'low_thrust': None}
-    elif genre == 1:
-        return {'genre': 1, 'impulse': np.array(args), 'low_thrust': None}
-    elif genre == 2:
-        return {'genre': 2, 'impulse': None, 'low_thrust': np.array(args)}
+
+if __name__ == "__main__":
+    a = ImpulseAction(20, 0, 2000)
+    print(isinstance(a, ImpulseAction))

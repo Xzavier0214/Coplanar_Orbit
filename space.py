@@ -1,49 +1,23 @@
 import gym
-import numpy as np
+from action import Action, NoneAction, ImpulseAction, LowThrustAction
 
 
-class NoneSpace(gym.spaces.Space):
+class ActionSpace(gym.spaces.Space):
     def __init__(self):
-        super(NoneSpace, self).__init__(None, None)
+        super(ActionSpace, self).__init__(None, None)
 
     def sample(self):
-        return None
-
-    def seed(self, seed=None):
-        pass
+        return NoneAction()
 
     def contains(self, x):
-        return x is None
-
-
-class Union(gym.spaces.Space):
-    def __init__(self, spaces):
-        assert spaces is not None
-        self.spaces = spaces
-        for space in spaces:
-            assert isinstance(space, gym.spaces.Space)
-        super(Union, self).__init__(None, None)
-
-    def sample(self):
-        return self.spaces[0].sample()
-
-    def seed(self, seed=None):
-        [space.seed(seed) for space in self.spaces]
-
-    def contains(self, x):
-        if x is None:
-            return any(isinstance(space, NoneSpace) for space in self.spaces)
-        else:
-            return any(space.contains(x) for space in self.spaces)
+        return isinstance(x, Action)
 
 
 if __name__ == "__main__":
-    union = Union((
-        gym.spaces.Box(
-            low=np.array([1]), high=np.array([3])),
-        NoneSpace()))
+    action_space = ActionSpace()
 
-    print(union.sample())
-    print(union.contains(None))
-    print(union.contains(np.array([2])))
-    print(union.contains(np.array([4])))
+    print(action_space.sample())
+    print(action_space.contains(NoneAction()))
+    print(action_space.contains(ImpulseAction(100, 0, None)))
+    print(action_space.contains(LowThrustAction(100, 0, None)))
+    print(action_space.contains([2, 3]))
